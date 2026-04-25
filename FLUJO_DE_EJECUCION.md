@@ -21,9 +21,10 @@ Otros metadatos:
 
 > Nota: Esta PoC tiene limitaciones considerables. No disponemos la capacidad de medir todo, solo la temeratura y luminosidad. Tampoco podremos desplegar las placas fisicamente en sitios estrategicos. Esto se discutirá mas adelante en el documento.
 
-Una vez recibidas todas las metricas, la EdgeAI del nodo emisor decidirá si se encuentra en una situacion de 'Alto riesgo', o si no lo está. Una situacion de alto riesgo viene definida por valores fuera de lo calificado como 'usual'. Esta informacion viene derivada de un dataset previamente construido. Una vez se toma la decision sobre la sitacion, se envia la decision junto con las metricas que se han medido.
+El protocolo de actuacion de los nodos esta dividido por rondas, cada ronda consisitendo en dos fases: 
+- En la primera fase de cada ronda, cada nodo emisor recibirá metricas. Estas metricas pueden venir de un sensor fisico del arduino o pueden venir de una funcion mock que los genere. Una vez recibidas todas las metricas, la EdgeAI del nodo emisor decidirá si se encuentra en una situacion de 'Alto riesgo', o si no lo está. Una situacion de alto riesgo viene definida por valores fuera de lo calificado como 'usual'. Esta informacion viene derivada de un dataset previamente construido. Una vez se toma la decision sobre la sitacion, se envia la decision junto con las metricas que se han medido.
 
-Todos los nodos se envian esta informacion por rondas. Cada ronda, cada nodo dispondrá de su decisión y la decision de los demas nodos. Si un numero mayor o igual a `t` nodos emisores califican la situacion de Alto riesgo, activaran medidas para regular la salud ambiental.
+- En la segunda fase, cada nodo ya sabrá la decisión que ha tomado el mismo y la decision de los demas nodos. Si un numero mayor o igual a `t` nodos emisores califican la situacion de Alto riesgo, activaran medidas para regular la salud ambiental. 't' vendrá dado por el cieling de la mitad de los nodos emisores. Es decir, que en una arquitectura de 3 nodos emisores, se necesitaran 2 veredictos de alto riesgo para activar las medidas.
 
 ### Nodos observadores
 Se define como un nodo observador aquel que solo recibe informacion dentro de la red P2P y no transmite datos. Conceptualmente es un PC. Este nodo se encarga de recibir la informacion de los nodos emisores y procesarla para posteriormente plasmarla en un Frontend interactivo con un mapa de la ciudad. 

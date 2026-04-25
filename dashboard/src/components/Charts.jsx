@@ -22,7 +22,6 @@ export default function P2PCharts({ dataHistory }) {
               <YAxis stroke="#94a3b8" domain={['dataMin - 2', 'dataMax + 2']} />
               <Tooltip labelFormatter={formatTime} />
               <Line type="monotone" dataKey="temperature" name="Temp" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 8 }} />
-              <Line type="monotone" dataKey="temp" name="Temp" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 8 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -38,7 +37,6 @@ export default function P2PCharts({ dataHistory }) {
               <YAxis stroke="#94a3b8" domain={[0, 100]} />
               <Tooltip labelFormatter={formatTime} />
               <Line type="monotone" dataKey="humidity" name="Humedad" stroke="#3b82f6" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="hum" name="Humedad" stroke="#3b82f6" strokeWidth={3} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -84,7 +82,6 @@ export default function P2PCharts({ dataHistory }) {
               <YAxis stroke="#94a3b8" />
               <Tooltip labelFormatter={formatTime} />
               <Line type="monotone" dataKey="airQuality" name="Calidad Aire" stroke="#f59e0b" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="air" name="Calidad Aire" stroke="#f59e0b" strokeWidth={3} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>

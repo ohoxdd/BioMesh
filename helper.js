@@ -1,5 +1,3 @@
-const fs = require('fs');
-
 /**
  * Funció per generar valors amb distribució normal (Gaussiana)
  * @param {number} mean - Valor mitjà (on es concentren les dades)
