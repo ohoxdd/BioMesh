@@ -2,11 +2,29 @@ const DHT = require('hyperdht');
 const process = require('bare-process');
 const Corestore = require('corestore');
 const Autobase = require('autobase');
+const WebSocket = require('ws');
 
-const publicKeyHex = '7e7a306c08e25bda7fc09d6da146597467530f6fd5e5478b461bc2f14093dda9';
+const wss = new WebSocket.Server({ port: 8080 });
+const clients = new Set();
+
+wss.on('connection', (ws) => {
+  console.log('Cliente Web conectado al Dashboard');
+  clients.add(ws);
+  ws.on('close', () => clients.delete(ws));
+});
+
+function broadcastData(data) {
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  }
+}
+
+const publicKeyHex = '8aaf76507b4a61d11f48ce7e126af835b377f5c715227e3306d5a3639238a99c';
 const publicKey = Buffer.from(publicKeyHex, 'hex');
 
-const autobaseKeyHex = 'e08d879715b52d76ac463a20e2356dd05f96a40567933cef201d93241be5d86a'
+const autobaseKeyHex = '627f61c7f6a9394688c08ecdede8f9a9107323cb52838fc70d366a34bded5740'
 const autobaseKey = Buffer.from(autobaseKeyHex, 'hex');
 
 async function conectar() {
@@ -16,7 +34,15 @@ async function conectar() {
   // 2. Función apply() para leer los bloques que nos llegan del Arduino 
   async function apply(nodes, view, host) {
     for (const node of nodes) {
-       console.log('EVENTO RECIBIDO DE LA RED:', node.value.toString());
+       const strValue = node.value.toString();
+       console.log('EVENTO RECIBIDO DE LA RED:', strValue);
+       try {
+           const parsedData = JSON.parse(strValue);
+           broadcastData(parsedData);
+       } catch(e) {
+           // Si no es JSON válido, lo enviamos como texto plano
+           broadcastData({ raw: strValue });
+       }
     }
   }
 

@@ -44,4 +44,3 @@ async function iniciarNodo() {
 }
 
 iniciarNodo();
-arduino@generic

@@ -22,6 +22,7 @@
     "autobase": "^7.27.3",
     "bare-process": "^4.4.1",
     "corestore": "^7.9.2",
-    "hyperdht": "^6.30.0"
+    "hyperdht": "^6.30.0",
+    "ws": "^8.20.0"
   }
 }
