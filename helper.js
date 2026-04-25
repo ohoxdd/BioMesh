@@ -1,55 +1,58 @@
-/*const fs = require('fs');*/
+const fs = require('fs');
+
+/**
+ * Funció per generar valors amb distribució normal (Gaussiana)
+ * @param {number} mean - Valor mitjà (on es concentren les dades)
+ * @param {number} stdDev - Desviació estàndard (com de disperses estan)
+ */
+function randomNormal(mean, stdDev) {
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random();
+    while(v === 0) v = Math.random();
+    const num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    return num * stdDev + mean;
+}
 
 const generateMockData = () => {
     const getRandomInRange = (min, max, decimals = 1) => 
         parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 
-    //Calculamos primero la temperatura
-    const temperature = getRandomInRange(-10, 100);
+    //Mitjana de 25°C amb desviació de 5°C per ser "regular"
+    let temperature = randomNormal(25, 5);
 
-    //humedad basada en la temperatura calculada
+    //SPIKE (30% de probabilitat de valor exagerat)
+    const isSpike = Math.random() < 0.30; 
+    if (isSpike) {
+        // Generem un pic extrem
+        temperature = Math.random() > 0.5 ? getRandomInRange(80, 100) : getRandomInRange(-30, -10);
+    }
+
+    //HUMITAT basada en la temperatura (Inversament proporcional)
     let humidity;
     if (temperature >= 35) {
-        humidity = getRandomInRange(40, 100); // Rango desorbitado
+        // Spike d'humitat si fa molta calor
+        humidity = getRandomInRange(80, 1000); 
     } else {
-        humidity = getRandomInRange(0, 100);   // Rango normal
+        // Humitat normal gaussiana al voltant del 50%
+        humidity = Math.max(0, Math.min(100, randomNormal(50, 15)));
     }
 
-    let light;
-    if (temperature > 25) {
-        light = getRandomInRange(500, 1000); // Más luz en temperaturas altas
-    }
-    else {
-        light = getRandomInRange(100, 500); // Menos luz en temperaturas bajas
-    }
+    //LLUM basada en temperatura
+    let light = (temperature > 25) ? randomNormal(800, 100) : randomNormal(300, 50);
+    light = Math.max(0, Math.min(1000, light)); // Limitem rangs
 
-    // 3. Retornamos el objeto con los valores ya listos
     return {
-        peerId:'emisor-arduino-1', // Afegit perquè el teu emisor el demanava
+        peerId: 'emisor-arduino-1',
         timestamp: Date.now(),
         location: {
             lat: getRandomInRange(41.3800, 41.4000, 4), 
             lon: getRandomInRange(2.1500, 2.1700, 4)
         },
-        temperature: temperature, // Usamos la variable de arriba
-        humidity: humidity,       // Usamos la variable de arriba
-        wind: getRandomInRange(0, 100),
-        light: light,
+        temperature: parseFloat(temperature.toFixed(1)),
+        humidity: parseFloat(humidity.toFixed(1)),
+        wind: Math.max(0, randomNormal(15, 10)).toFixed(1),
+        light: parseFloat(light.toFixed(1)),
         airQuality: getRandomInRange(0, 100)
     };
 };
-
 module.exports = { generateMockData };
-
-/*const sendDataToNetwork = () => {
-    const sensorData = generateMockData(); 
-    
-    // Simulem l'enviament P2P
-    // myP2PNode.broadcast(JSON.stringify(sensorData)); 
-
-    // CORRECCIÓ: Fem servir 'sensorData' (que és el que hem definit a dalt)
-    // Fem servir appendFileSync si vols anar afegint dades en lloc de sobreescriure-les
-    fs.appendFileSync('dataset.json', JSON.stringify(sensorData) + "\n"); 
-    
-    console.log("Dato enviado y guardado a las:", sensorData.timestamp);
-};*/
