@@ -1,0 +1,20 @@
+{
+  "name": "hackupc_2026",
+  "version": "1.0.0",
+  "description": "P2P natural preservation Network",
+  "homepage": "https://github.com/Salipoke/hackUPC_2026#readme",
+  "bugs": {
+    "url": "https://github.com/Salipoke/hackUPC_2026/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salipoke/hackUPC_2026.git"
+  },
+  "license": "MIT",
+  "author": "FiberGang",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
