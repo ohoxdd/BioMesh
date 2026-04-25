@@ -76,33 +76,26 @@ async function conectar() {
 
   async function apply(nodes, view, host) {
     for (const node of nodes) {
-      if (node.value.addWriter) {
-        console.log('OBSERVADOR: Añadiendo writer');
-        await host.addWriter(node.value.addWriter, { isIndexer: true });
-      } else {
-        const strValue = node.value.toString();
-        console.log('>>> RECIBIDO:', strValue);
-        try {
-          const data = JSON.parse(strValue);
-          broadcast(data);
-        } catch(e) {
-          broadcast({ raw: strValue });
-        }
+      const v = node.value;
+      if (v && v.addWriter) {
+        const k = Buffer.isBuffer(v.addWriter) ? v.addWriter : Buffer.from(v.addWriter, 'hex');
+        console.log('OBSERVADOR apply: addWriter', k.toString('hex').substring(0, 16), 'peerId:', v.peerId);
+        try { await host.addWriter(k, { indexer: true }); } catch(e) { console.log('add fail:', e.message); }
+      } else if (v) {
+        console.log('>>> RX:', v.peerId, v.temperature?.toFixed?.(1));
+        broadcast(v);
       }
     }
   }
 
-  let base;
-  if (BASE_KEY) {
-    console.log('Usando key:', BASE_KEY);
-    const keyBuffer = Buffer.from(BASE_KEY, 'hex');
-    base = new Autobase(store, keyBuffer, { apply });
-    await base.ready();
-  } else {
-    console.log('Creando nueva base');
-    base = new Autobase(store, null, { apply });
-    await base.ready();
-  }
+  const keyBuffer = BASE_KEY ? Buffer.from(BASE_KEY, 'hex') : null;
+  console.log(BASE_KEY ? 'Joining base: ' + BASE_KEY : 'Creating new base');
+  const base = new Autobase(store, keyBuffer, {
+    apply,
+    valueEncoding: 'json',
+    ackInterval: 1000
+  });
+  await base.ready();
 
   console.log('=== KEY:', base.key.toString('hex'), '===');
   console.log('Writable:', base.writable);
@@ -117,7 +110,16 @@ async function conectar() {
 
   setInterval(async () => {
     await base.update();
-  }, 3000);
+    let aw = 0;
+    const ws = [];
+    if (base.activeWriters) {
+      for (const w of base.activeWriters) {
+        aw++;
+        ws.push(w.core.key.toString('hex').substring(0,16));
+      }
+    }
+    console.log('[STATE] activeWriters:', aw, ws.join(','), 'writable:', base.writable);
+  }, 5000);
 }
 
 conectar();

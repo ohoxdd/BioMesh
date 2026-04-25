@@ -1,162 +1,220 @@
 #!/bin/bash
-# BioMeshP2P - Script de inicio rápido
-# Uso: ./start.sh [emisor|observador|dashboard|all]
+# BioMeshP2P - launcher
+# Uso: ./start.sh {emisor1|emisor2|emisor3|observador|dashboard|all|multi|local|stop|status|clean}
 
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
-EMITOR_PID=""
-OBS_PID=""
-DASH_PID=""
-EMISOR_OUT="/tmp/biomesh-emisor-out.txt"
+E1_LOG="/tmp/biomesh-emisor1.log"
+E2_LOG="/tmp/biomesh-emisor2.log"
+E3_LOG="/tmp/biomesh-emisor3.log"
+OBS_LOG="/tmp/biomesh-observador.log"
+DASH_LOG="/tmp/biomesh-dashboard.log"
+
+E1_PID=""; E2_PID=""; E3_PID=""; OBS_PID=""; DASH_PID=""
 
 cleanup() {
     echo ""
-    echo "=== LIMPIEZA ==="
-    [ -n "$EMISOR_PID" ] && kill $EMISOR_PID 2>/dev/null && echo "Emisor parado"
-    [ -n "$OBS_PID" ] && kill $OBS_PID 2>/dev/null && echo "Observador parado"
-    [ -n "$DASH_PID" ] && kill $DASH_PID 2>/dev/null && echo "Dashboard parado"
-    echo "Limpieza completa"
+    echo "=== CLEANUP ==="
+    [ -n "$E1_PID" ] && kill $E1_PID 2>/dev/null && echo "Emisor1 stop"
+    [ -n "$E2_PID" ] && kill $E2_PID 2>/dev/null && echo "Emisor2 stop"
+    [ -n "$E3_PID" ] && kill $E3_PID 2>/dev/null && echo "Emisor3 stop"
+    [ -n "$OBS_PID" ] && kill $OBS_PID 2>/dev/null && echo "Observador stop"
+    [ -n "$DASH_PID" ] && kill $DASH_PID 2>/dev/null && echo "Dashboard stop"
+    pkill -f "pear run emisor" 2>/dev/null || true
+    pkill -f "node observador" 2>/dev/null || true
 }
-
 trap cleanup EXIT INT TERM
 
-case "${1:-all}" in
-    emisor)
-        echo "=== INICIANDO EMISOR ==="
-        rm -rf datos-biomesh-emisor
-        pear run emisor.js > "$EMISOR_OUT" 2>&1 &
-        EMISOR_PID=$!
-        echo "Emisor PID: $EMISOR_PID"
-        echo "Output en: $EMISOR_OUT"
-        sleep 2
-        echo ""
-        echo "Espera a que imprima la KEY:"
-        echo "  grep '^=== KEY:' $EMISOR_OUT"
-        echo ""
-        tail -f "$EMISOR_OUT"
+extract_key() {
+    local log=$1
+    grep "^=== KEY:" "$log" 2>/dev/null | head -1 | awk '{print $3}'
+}
+
+wait_for_key() {
+    local log=$1
+    local tries=0
+    while [ $tries -lt 30 ]; do
+        local k=$(extract_key "$log")
+        if [ -n "$k" ]; then echo "$k"; return 0; fi
+        sleep 1
+        tries=$((tries+1))
+    done
+    return 1
+}
+
+case "${1:-multi}" in
+    emisor1|emisor)
+        echo "=== EMISOR 1 (creator) ==="
+        rm -rf datos-biomesh-emisor-arduino-1
+        pear run emisor.js emisor-arduino-1 | tee "$E1_LOG"
         ;;
-        
+
+    emisor2)
+        KEY="$2"
+        if [ -z "$KEY" ]; then KEY=$(extract_key "$E1_LOG"); fi
+        if [ -z "$KEY" ]; then echo "ERROR: need KEY (arg or run emisor1 first)"; exit 1; fi
+        echo "=== EMISOR 2 ==="
+        echo "KEY: $KEY"
+        rm -rf datos-biomesh-emisor-arduino-2
+        pear run emisor.js emisor-arduino-2 "$KEY" | tee "$E2_LOG"
+        ;;
+
+    emisor3)
+        KEY="$2"
+        if [ -z "$KEY" ]; then KEY=$(extract_key "$E1_LOG"); fi
+        if [ -z "$KEY" ]; then echo "ERROR: need KEY (arg or run emisor1 first)"; exit 1; fi
+        echo "=== EMISOR 3 ==="
+        echo "KEY: $KEY"
+        rm -rf datos-biomesh-emisor-arduino-3
+        pear run emisor.js emisor-arduino-3 "$KEY" | tee "$E3_LOG"
+        ;;
+
     observador)
-        echo "=== INICIANDO OBSERVADOR ==="
+        KEY="$2"
+        if [ -z "$KEY" ]; then KEY=$(extract_key "$E1_LOG"); fi
+        if [ -z "$KEY" ]; then echo "ERROR: need KEY (arg or run emisor1 first)"; exit 1; fi
+        echo "=== OBSERVADOR ==="
+        echo "KEY: $KEY"
         rm -rf datos-biomesh-observador
-        
-        # Leer key del archivo o argumentos
-        KEY=""
-        if [ -n "$2" ]; then
-            KEY="$2"
-        elif [ -f "$EMISOR_OUT" ]; then
-            KEY=$(grep "^=== KEY:" "$EMISOR_OUT" 2>/dev/null | awk '{print $3}')
-        fi
-        
-        if [ -z "$KEY" ]; then
-            echo "ERROR: No se encontró la key del emisor"
-            echo "Ejecuta primero: ./start.sh emisor"
-            echo "O pasa la key: ./start.sh observador <KEY>"
-            exit 1
-        fi
-        
-        echo "Key: $KEY"
-        echo ""
         node observador.js "$KEY"
         ;;
-        
+
     dashboard)
-        echo "=== INICIANDO DASHBOARD ==="
-        cd dashboard
-        npm run dev &
-        DASH_PID=$!
-        echo "Dashboard PID: $DASH_PID"
-        echo "Abriendo http://localhost:5173"
-        tail -f /dev/null
+        echo "=== DASHBOARD ==="
+        cd dashboard && npm run dev
         ;;
-        
-    all)
-        echo "=== BIOMESHP2P - INICIANDO TODO ==="
+
+    multi|all|3emisores)
+        echo "=== BIOMESHP2P MULTI (3 emisores + obs + dashboard) ==="
         echo ""
-        
-        # 1. Emisor
-        echo "1. Iniciando EMISOR (Pear)..."
-        rm -rf datos-biomesh-emisor
-        pear run emisor.js > "$EMISOR_OUT" 2>&1 &
-        EMISOR_PID=$!
-        sleep 8
-        
-        KEY=$(grep "^=== KEY:" "$EMISOR_OUT" 2>/dev/null | awk '{print $3}')
+
+        # cleanup data dirs
+        rm -rf datos-biomesh-* /tmp/biomesh-derive-* 2>/dev/null || true
+
+        # 1. Emisor 1 (creator)
+        echo "[1/5] Emisor 1 (creator)..."
+        nohup pear run emisor.js emisor-arduino-1 > "$E1_LOG" 2>&1 &
+        E1_PID=$!
+        echo "  PID: $E1_PID, log: $E1_LOG"
+
+        KEY=$(wait_for_key "$E1_LOG")
         if [ -z "$KEY" ]; then
-            echo "ERROR: No se pudo obtener la key del emisor"
+            echo "ERROR: no KEY from emisor1"
+            tail -30 "$E1_LOG"
             exit 1
         fi
-        echo "   Key: $KEY"
-        
+        echo "  KEY: $KEY"
+        sleep 5
+
         # 2. Observador
         echo ""
-        echo "2. Iniciando OBSERVADOR (Node.js)..."
-        rm -rf datos-biomesh-observador
-        node observador.js "$KEY" > /tmp/observador.log 2>&1 &
+        echo "[2/5] Observador..."
+        nohup node observador.js "$KEY" > "$OBS_LOG" 2>&1 &
         OBS_PID=$!
+        echo "  PID: $OBS_PID, log: $OBS_LOG"
         sleep 5
-        
-        # 3. Dashboard
+
+        # 3. Emisor 2
         echo ""
-        echo "3. Iniciando DASHBOARD (Vite)..."
-        cd dashboard
-        npm run dev > /dev/null 2>&1 &
-        DASH_PID=$!
-        cd ..
-        
+        echo "[3/5] Emisor 2..."
+        nohup pear run emisor.js emisor-arduino-2 "$KEY" > "$E2_LOG" 2>&1 &
+        E2_PID=$!
+        echo "  PID: $E2_PID, log: $E2_LOG"
+        sleep 3
+
+        # 4. Emisor 3
         echo ""
-        echo "=== SISTEMA ARRANCADO ==="
+        echo "[4/5] Emisor 3..."
+        nohup pear run emisor.js emisor-arduino-3 "$KEY" > "$E3_LOG" 2>&1 &
+        E3_PID=$!
+        echo "  PID: $E3_PID, log: $E3_LOG"
+        sleep 3
+
+        # 5. Dashboard
         echo ""
-        echo "Componentes activos:"
-        [ -n "$EMISOR_PID" ] && echo "  - Emisor (Pear): PID $EMISOR_PID"
-        [ -n "$OBS_PID" ] && echo "  - Observador (Node.js): PID $OBS_PID"
-        [ -n "$DASH_PID" ] && echo "  - Dashboard: http://localhost:5173"
+        echo "[5/5] Dashboard..."
+        (cd dashboard && nohup npm run dev > "$DASH_LOG" 2>&1 &)
+        sleep 3
+
         echo ""
-        echo "Archivos de log:"
-        echo "  - Emisor: $EMISOR_OUT"
-        echo "  - Observador: /tmp/observador.log"
-        echo ""
-        echo "Pulsa Ctrl+C para parar todo"
-        echo ""
-        
-        # Mantener vivo y mostrar logs
-        tail -f "$EMISOR_OUT" /tmp/observador.log 2>/dev/null || sleep 1000
-        ;;
-        
-    stop)
-        echo "=== PARANDO SISTEMA ==="
-        pkill -f "pear run emisor" 2>/dev/null && echo "Emisor parado"
-        pkill -f "node observador" 2>/dev/null && echo "Observador parado"
-        pkill -f "vite" 2>/dev/null && echo "Dashboard parado"
-        ;;
-        
-    status)
-        echo "=== ESTADO DEL SISTEMA ==="
-        echo ""
-        echo "Procesos:"
-        ps aux | grep -E "(pear run|node observador|vite)" | grep -v grep || echo "  Ninguno activo"
-        echo ""
-        echo "Datos:"
-        [ -d datos-biomesh-emisor ] && echo "  - Emisor: datos-biomesh-emisor/"
-        [ -d datos-biomesh-observador ] && echo "  - Observador: datos-biomesh-observador/"
+        echo "=== READY ==="
+        echo "  Dashboard:    http://localhost:5173"
+        echo "  WS Observer:  ws://localhost:8080"
+        echo "  Base KEY:     $KEY"
         echo ""
         echo "Logs:"
-        [ -f "$EMISOR_OUT" ] && tail -5 "$EMISOR_OUT"
-        ;;
-        
-    *)
-        echo "Uso: $0 {emisor|observador|dashboard|all|stop|status}"
+        echo "  Emisor1:    $E1_LOG"
+        echo "  Emisor2:    $E2_LOG"
+        echo "  Emisor3:    $E3_LOG"
+        echo "  Observador: $OBS_LOG"
+        echo "  Dashboard:  $DASH_LOG"
         echo ""
-        echo "Comandos:"
-        echo "  emisor      - Iniciar solo el emisor (Pear)"
-        echo "  observador  - Iniciar solo el observador (Node.js)"
-        echo "  dashboard    - Iniciar solo el dashboard (Vite)"
-        echo "  all          - Iniciar todo el sistema (default)"
-        echo "  stop         - Parar todos los procesos"
-        echo "  status       - Ver estado del sistema"
+        echo "Tail combined RX (Ctrl+C to stop):"
+        echo ""
+        tail -f "$OBS_LOG" 2>/dev/null
+        ;;
+
+    local)
+        # Same as multi but explicit
+        exec "$0" multi
+        ;;
+
+    stop)
+        echo "=== STOP ==="
+        pkill -f "pear run emisor" 2>/dev/null && echo "emisores stop" || echo "no emisores"
+        pkill -f "node observador" 2>/dev/null && echo "obs stop" || echo "no obs"
+        pkill -f "vite" 2>/dev/null && echo "dashboard stop" || echo "no dash"
+        ;;
+
+    status)
+        echo "=== STATUS ==="
+        ps aux | grep -E "(pear run emisor|node observador|vite)" | grep -v grep || echo "  none"
+        echo ""
+        if [ -f "$E1_LOG" ]; then
+            KEY=$(extract_key "$E1_LOG")
+            [ -n "$KEY" ] && echo "Last KEY: $KEY"
+        fi
+        ;;
+
+    clean)
+        echo "=== CLEAN ==="
+        rm -rf datos-biomesh-* /tmp/biomesh-derive-* 2>/dev/null
+        rm -f /tmp/biomesh-*.log 2>/dev/null
+        echo "data dirs + logs wiped"
+        ;;
+
+    key)
+        KEY=$(extract_key "$E1_LOG")
+        [ -n "$KEY" ] && echo "$KEY" || { echo "no key found"; exit 1; }
+        ;;
+
+    *)
+        cat <<EOF
+Usage: $0 {emisor1|emisor2|emisor3|observador|dashboard|multi|stop|status|clean|key}
+
+Single procs:
+  emisor1            Start emisor 1 (creator). Always run first.
+  emisor2 [KEY]      Start emisor 2. KEY auto-read from emisor1 log if omitted.
+  emisor3 [KEY]      Start emisor 3.
+  observador [KEY]   Start observador + WS server (port 8080).
+  dashboard          Start Vite dev server (port 5173).
+
+Combined:
+  multi              Start everything: 3 emisores + obs + dashboard. Default.
+  stop               Kill all biomesh procs.
+  status             Show running procs + last KEY.
+  clean              Wipe data dirs + logs.
+  key                Print last base KEY from emisor1 log.
+
+Multi-machine:
+  Machine A: ./start.sh emisor1   → copy KEY printed
+  Machine B: ./start.sh emisor2 <KEY>
+  Machine C: ./start.sh emisor3 <KEY>
+  Machine X: ./start.sh observador <KEY>  + ./start.sh dashboard
+EOF
         exit 1
         ;;
 esac

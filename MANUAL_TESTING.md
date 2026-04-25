@@ -1,156 +1,249 @@
-# Manual de Testing - BioMeshP2P
+# Manual de Testing - BioMeshP2P (Multi-Emisor)
 
-## Requisitos Previos
+Sistema P2P con **3 emisores** (`emisor-arduino-1/2/3`), 1 observador y 1 dashboard.
+Usa Autobase con writers pre-añadidos por clave determinista derivada del `peerId`.
 
-- Node.js instalado
-- Pear instalado (`npm install -g pear`)
-- Dependencias del proyecto instaladas (`npm install`)
+---
 
-## Instalación
+## Requisitos
+
+- Node.js 18+
+- Pear runtime (`npm i -g pear`)
+- `npm install` en raíz y en `dashboard/`
 
 ```bash
-cd /home/hfern/Documents/stuff/HackUPC/hackUPC_2026
+cd hackUPC_2026
 npm install
 cd dashboard && npm install && cd ..
 ```
 
 ---
 
-## Uso Rápido (3 comandos)
-
-### 1. Iniciar todo el sistema
+## Quick Start (1 comando, todo local)
 
 ```bash
-cd /home/hfern/Documents/stuff/HackUPC/hackUPC_2026
-./start.sh all
+./start.sh multi
+# o equivalente:
+npm run start:multi
 ```
 
-Esto iniciara automaticamente:
-- Emisor (Pear) - genera datos	mock
-- Observador (Node.js) - recibe y reenvia
-- Dashboard (Vite) - visualizacion web
+Lanza en orden:
+1. Emisor 1 (creator) → imprime `=== KEY: <hex> ===`
+2. Observador (port 8080)
+3. Emisor 2
+4. Emisor 3
+5. Dashboard (port 5173)
 
-Abre tu navegador: **http://localhost:5173**
+Dashboard: **http://localhost:5173**
 
 ---
 
-## Uso Individual
+## Arquitectura Multi-Emisor
 
-Si prefieres controlar cada componente por separado:
+```
+Emisor 1 (creator)        Emisor 2              Emisor 3
+   |                        |                       |
+   | Autobase.append()      | Autobase.append()     | Autobase.append()
+   |                        |                       |
+   +------+-----------------+-----------------------+
+          |
+          | Hyperswarm DHT (discoveryKey = base.discoveryKey)
+          |
+          v
+       Observador
+          |
+          | apply(nodes) → broadcast(JSON)
+          |
+          v
+   WebSocket :8080
+          |
+          v
+      Dashboard (port 5173)
+```
 
-### Terminal 1 - Emisor (Primero)
+Cada `peerId` deriva determinísticamente su `primaryKey` via SHA-256 → cada nodo conoce las writer keys de los otros sin coordinación. Emisor 1 (creator) ejecuta `base.append({addWriter: <key>})` para `emisor-arduino-2` y `emisor-arduino-3` al arrancar.
+
+---
+
+## Modo Manual (terminales separadas)
+
+### Terminal 1 - Emisor 1 (creator, primero siempre)
 
 ```bash
-cd /home/hfern/Documents/stuff/HackUPC/hackUPC_2026
-./start.sh emisor
+./start.sh emisor1
+# o:
+npm run emisor1
 ```
 
-Veras un output como:
+Output:
 ```
-=== KEY: 51f5fa69c41134e160f5d9c85445e9d7bf91b4a2f9cff999fb8ea412fd53730e ===
+=== KEY: 75e5dadf26d7a4b074a0b7efc03b5334553fa5b0d16da67b220de4b7ba9cc1bb ===
+peerId: emisor-arduino-1
 Writable: true
->>> ENVIADO: 26.3 °C
+Creator: pre-adding known peers as writers
+pre-add writer: emisor-arduino-2 f1e98b2c0872325d
+pre-add writer: emisor-arduino-3 eac47d8eb5844fcd
+>>> SENT: emisor-arduino-1 26.3 °C
 ```
 
-**Copia la key** (la cadena de 64 caracteres entre `=== KEY:` y `===`)
+Copia la `KEY` (64 hex). Es **determinista** — siempre la misma para `emisor-arduino-1`.
 
 ### Terminal 2 - Observador
 
 ```bash
-cd /home/hfern/Documents/stuff/HackUPC/hackUPC_2026
 ./start.sh observador <KEY>
+# o auto-leer key del log:
+./start.sh observador
 ```
 
-Reemplaza `<KEY>` con la key que copiaste del emisor.
-
-Ejemplo:
-```bash
-./start.sh observador 51f5fa69c41134e160f5d9c85445e9d7bf91b4a2f9cff999fb8ea412fd53730e
+Output esperado tras unos segundos:
+```
+OBSERVADOR apply: addWriter f1e98b2c0872325d peerId: emisor-arduino-2
+OBSERVADOR apply: addWriter eac47d8eb5844fcd peerId: emisor-arduino-3
+>>> RX: emisor-arduino-1 26.3
+[STATE] activeWriters: 4 ...
 ```
 
-Deberias ver:
-```
-Usando ws (Node.js)
-Usando key: 51f5fa...
-=== KEY: 51f5fa... ===
-Dashboard Web conectado
-OBSERVADOR: peer conectado
->>> RECIBIDO: {"peerId":"emisor-arduino-1",...}
-```
-
-### Terminal 3 - Dashboard
+### Terminal 3 - Emisor 2
 
 ```bash
-cd /home/hfern/Documents/stuff/HackUPC/hackUPC_2026/dashboard
-npm run dev
+./start.sh emisor2 <KEY>
+# o auto-key:
+./start.sh emisor2
 ```
 
-Abre: **http://localhost:5173**
+### Terminal 4 - Emisor 3
+
+```bash
+./start.sh emisor3 <KEY>
+```
+
+### Terminal 5 - Dashboard
+
+```bash
+./start.sh dashboard
+# o:
+npm run dashboard
+```
+
+Abre **http://localhost:5173**.
 
 ---
 
-## Verificar que Funciona
+## Verificar Multi-Emisor
 
-### 1. Emisor
+### 1. Observador debe ver los 3 peers
 
-En la terminal del emisor, deberias ver:
-```
->>> ENVIADO: 25.4 °C
->>> ENVIADO: 28.9 °C
+```bash
+tail -f /tmp/biomesh-observador.log | grep ">>> RX:"
 ```
 
-### 2. Observador
-
-En la terminal del observador, deberias ver:
+Esperar:
 ```
->>> RECIBIDO: {"peerId":"emisor-arduino-1","temperature":25.4,...}
-Dashboard Web conectado
+>>> RX: emisor-arduino-1 27.2
+>>> RX: emisor-arduino-2 24.1
+>>> RX: emisor-arduino-3 28.7
 ```
 
-### 3. Dashboard
+### 2. activeWriters = 4
 
-En el navegador veras:
-- Mapa con marcador en Barcelona
-- Grafico de temperatura
-- Grafico de humedad
-- Otros graficos
+```bash
+grep "STATE" /tmp/biomesh-observador.log | tail -3
+```
+
+Esperar `activeWriters: 4` (observador + 3 emisores).
+
+### 3. WebSocket muestra 3 peers distintos
+
+```bash
+node -e "
+const WebSocket = require('ws');
+const ws = new WebSocket('ws://localhost:8080');
+const peers = new Map();
+ws.on('message', d => {
+  const m = JSON.parse(d.toString());
+  if (m.peerId) peers.set(m.peerId, (peers.get(m.peerId)||0)+1);
+});
+setTimeout(() => {
+  console.log('Peers seen:');
+  for (const [k,v] of peers) console.log(' ', k, ':', v);
+  process.exit(0);
+}, 30000);
+"
+```
+
+Tras 30s debe imprimir 3 peerIds distintos.
 
 ---
 
-## Comandos Utiles
+## Multi-Máquina (red real)
 
-### Ver estado
+Mismo código en cada máquina. Coordinación solo via base KEY.
 
+**Máquina A** (creator):
 ```bash
-./start.sh status
+./start.sh emisor1
+# anota la KEY
 ```
 
-Muestra los procesos activos y archivos de datos.
-
-### Parar todo
-
+**Máquina B**:
 ```bash
-./start.sh stop
+./start.sh emisor2 <KEY-de-A>
 ```
 
-O simplemente Ctrl+C en el terminal donde ejecutaste `./start.sh all`
+**Máquina C**:
+```bash
+./start.sh emisor3 <KEY-de-A>
+```
 
-### Limpiar datos
+**Máquina X** (observador + dashboard):
+```bash
+./start.sh observador <KEY-de-A> &
+./start.sh dashboard
+```
+
+Hyperswarm DHT atraviesa NAT automáticamente. Si falla → revisar firewall puerto UDP saliente.
+
+---
+
+## NPM Scripts
 
 ```bash
-cd /home/hfern/Documents/stuff/HackUPC/hackUPC_2026
-rm -rf datos-biomesh-*
+npm run emisor1           # pear run emisor.js emisor-arduino-1
+npm run emisor2           # pear run emisor.js emisor-arduino-2
+npm run emisor3           # pear run emisor.js emisor-arduino-3
+npm run observador        # node observador.js (key como arg)
+npm run dashboard         # cd dashboard && vite
+npm run start:multi       # ./start.sh multi (todo local)
+npm run stop              # ./start.sh stop
+npm run status            # ./start.sh status
+npm run clean             # rm -rf datos + logs
+```
+
+---
+
+## Comandos `start.sh`
+
+```
+./start.sh emisor1         Emisor 1 (creator). Lanzar primero.
+./start.sh emisor2 [KEY]   Emisor 2. Sin KEY lee log de emisor1.
+./start.sh emisor3 [KEY]   Emisor 3.
+./start.sh observador [KEY]
+./start.sh dashboard
+./start.sh multi           Todo local en background. Default.
+./start.sh stop            Mata todos los procesos biomesh.
+./start.sh status          Procesos activos + última KEY.
+./start.sh clean           Borra datos-biomesh-* y logs.
+./start.sh key             Imprime última KEY.
 ```
 
 ---
 
 ## Estructura de Datos
 
-El emisor genera datos en este formato:
-
 ```json
 {
-  "peerId": "emisor-arduino-1",
+  "peerId": "emisor-arduino-2",
   "timestamp": 1777154211340,
   "location": [41.3878, 2.1596],
   "lat": 41.3878,
@@ -163,90 +256,77 @@ El emisor genera datos en este formato:
 }
 ```
 
+`peerId` ahora es discriminador real → dashboard distingue datos por emisor.
+
 ---
 
-## Solucion de Problemas
+## Troubleshooting
 
-### Puerto 8080 en uso
+### Puerto 8080 ocupado
 
 ```bash
 lsof -ti:8080 | xargs -r kill -9
-./start.sh all
 ```
 
-### El dashboard no muestra datos
+### Observador solo ve emisor 1
 
-1. Verifica que el observador esta corriendo:
+- Verifica los 3 emisores corren: `./start.sh status`
+- Espera 30-60s. Sincronización de writers requiere unos ciclos.
+- Confirma misma KEY en todos.
+
+### Emisor 2/3 no llega a `Writable: true`
+
+- Asegúrate de que emisor 1 arrancó **primero** y completó `Creator: pre-adding known peers`.
+- Si falla, `./start.sh clean` y reinicia.
+
+### Logs
+
+```
+/tmp/biomesh-emisor1.log
+/tmp/biomesh-emisor2.log
+/tmp/biomesh-emisor3.log
+/tmp/biomesh-observador.log
+/tmp/biomesh-dashboard.log
+```
+
+### Reset total
+
 ```bash
-./start.sh status
+./start.sh stop
+./start.sh clean
+./start.sh multi
 ```
-
-2. Prueba WebSocket manualmente:
-```bash
-node -e "
-const WebSocket = require('ws');
-const ws = new WebSocket('ws://localhost:8080');
-ws.on('open', () => console.log('WS conectado'));
-ws.on('message', (data) => console.log('Datos:', data.toString().substring(0,100)));
-ws.on('error', (e) => console.error('Error:', e.message));
-setTimeout(() => ws.close(), 3000);
-"
-```
-
-### El observador no conecta al emisor
-
-1. Verifica que la key es correcta (64 caracteres)
-2. Verifica que el emisor esta corriendo
-3. Mira los logs en `/tmp/biomesh-emisor-out.txt`
 
 ---
 
-## Flujo de Datos
+## Flujo de Datos Detallado
 
 ```
-emisor.js
+emisor.js (peerId=emisor-arduino-N)
     │
-    ├─> genera datos (helper.js)
+    ├─ derivePrimaryKey(peerId) → primaryKey determinista
+    ├─ Corestore({primaryKey, unsafe:true})
+    ├─ Autobase(store, BASE_KEY?, {apply, valueEncoding:'json'})
     │
-    ├─> Autobase.append(JSON.stringify(data))
+    │  Si creator (sin BASE_KEY):
+    │    └─ pre-add writers de emisor-arduino-2 y emisor-arduino-3
     │
-    └─> Hyperswarm replication
-            │
-            ▼
+    ├─ generateMockData(peerId) → JSON
+    └─ base.append(data)
+              │
+              │ Hyperswarm replication (discoveryKey = base.discoveryKey)
+              ▼
 observador.js
     │
-    ├─> Autobase.apply() recibe datos
-    │
-    ├─> broadcast() envia al WebSocket
-    │
-    └─> WebSocket (puerto 8080)
-            │
-            ▼
+    ├─ Autobase con misma KEY
+    ├─ apply(nodes) recorre cada node
+    │    ├─ value.addWriter → host.addWriter()
+    │    └─ value tipo data → broadcast(value)
+    └─ WebSocket :8080
+              │
+              ▼
 dashboard/App.jsx
     │
-    ├─> onmessage() recibe JSON
-    │
-    ├─> setDataHistory()
-    │
-    └─> Charts.jsx renderiza graficos
-```
-
----
-
-## Scripts NPM
-
-Tambien puedes usar npm scripts:
-
-```bash
-# Todo
-npm start
-
-# Solo emisor
-npm run emisor
-
-# Solo observador (necesita key como argumento)
-npm run observador <KEY>
-
-# Solo dashboard
-npm run dashboard
+    ├─ ws.onmessage(data)
+    └─ setState por peerId → Charts/Map renderizan
 ```

@@ -1,64 +1,100 @@
-const DHT = require('hyperdht');
 const Corestore = require('corestore');
 const Autobase = require('autobase');
 const Hyperswarm = require('hyperswarm');
-
+const sodium = require('sodium-universal');
 const { generateMockData } = require('./helper.js');
 
-function getRandomInRange(min, max) {
-  return Math.random() * (max - min) + min;
+// Args: [peerId] [baseKey?] [storeDir?]
+let PEER_ID = 'emisor-arduino-1';
+let BASE_KEY = null;
+let STORE_DIR = null;
+
+let argv = [];
+if (typeof Pear !== 'undefined' && Pear.config.args) argv = Pear.config.args;
+else if (typeof process !== 'undefined' && process.argv) argv = process.argv.slice(2);
+
+if (argv[0]) PEER_ID = argv[0];
+if (argv[1]) BASE_KEY = argv[1];
+if (argv[2]) STORE_DIR = argv[2];
+if (!STORE_DIR) STORE_DIR = './datos-biomesh-' + PEER_ID;
+
+// Deterministic primaryKey from peerId → deterministic local core key
+function derivePrimaryKey(peerId) {
+  const out = Buffer.alloc(32);
+  const input = Buffer.from('biomesh-v1:' + peerId);
+  sodium.crypto_generichash(out, input);
+  return out;
 }
 
-/*function generateMockData() {
-  const now = Date.now();
-  return {
-    peerId: 'emisor-arduino-1',
-    timestamp: now,
-    location: [41.3879, 2.1699],
-    lat: 41.3879,
-    lng: 2.1699,
-    temperature: getRandomInRange(18, 32),
-    humidity: getRandomInRange(30, 80),
-    wind: getRandomInRange(0, 25),
-    light: getRandomInRange(100, 1000),
-    airQuality: getRandomInRange(20, 95)
-  };
-}*/
+// Known peers (shared knowledge across all nodes)
+const KNOWN_PEERS = ['emisor-arduino-1', 'emisor-arduino-2', 'emisor-arduino-3'];
 
 async function iniciarNodo() {
-  const store = new Corestore('./datos-biomesh-emisor');
+  const primaryKey = derivePrimaryKey(PEER_ID);
+  const store = new Corestore(STORE_DIR, { primaryKey, unsafe: true });
 
   async function apply(nodes, view, host) {
     for (const node of nodes) {
-      if (node.value.addWriter) {
-        console.log('EMISOR: Añadiendo writer');
-        await host.addWriter(node.value.addWriter, { isIndexer: true });
+      const v = node.value;
+      if (v && v.addWriter) {
+        const k = Buffer.isBuffer(v.addWriter) ? v.addWriter : Buffer.from(v.addWriter, 'hex');
+        console.log('apply addWriter', k.toString('hex').substring(0, 16), 'peerId:', v.peerId);
+        try { await host.addWriter(k, { indexer: true }); } catch(e) { console.log('add fail:', e.message); }
       }
     }
   }
 
-  const base = new Autobase(store, null, { apply });
+  const keyBuffer = BASE_KEY ? Buffer.from(BASE_KEY, 'hex') : null;
+  const base = new Autobase(store, keyBuffer, {
+    apply,
+    valueEncoding: 'json',
+    ackInterval: 1000
+  });
   await base.ready();
-  
-  const keyHex = base.key.toString('hex');
-  console.log('=== KEY:', keyHex, '===');
+
+  console.log('=== KEY:', base.key.toString('hex'), '===');
+  console.log('peerId:', PEER_ID);
+  console.log('storeDir:', STORE_DIR);
   console.log('Writable:', base.writable);
-  
+  console.log('localKey:', base.local.key.toString('hex'));
+
   const swarm = new Hyperswarm();
   swarm.join(base.discoveryKey);
-  
   swarm.on('connection', (socket) => {
-    console.log('EMISOR: peer conectado');
+    console.log('peer conectado');
     store.replicate(socket);
   });
 
+  base.on('writable', () => console.log('=== NOW WRITABLE ==='));
+  base.on('unwritable', () => console.log('=== NOT WRITABLE ==='));
+
+  // If creator (no BASE_KEY passed) → pre-add all known peers as writers
+  if (!BASE_KEY && base.writable) {
+    console.log('Creator: pre-adding known peers as writers');
+    for (const peer of KNOWN_PEERS) {
+      if (peer === PEER_ID) continue;
+      const peerPrimary = derivePrimaryKey(peer);
+      const tmpDir = '/tmp/biomesh-derive-' + peer + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+      const tmpStore = new Corestore(tmpDir, { primaryKey: peerPrimary, unsafe: true });
+      await tmpStore.ready();
+      const peerLocalKey = await Autobase.getLocalKey(tmpStore);
+      await tmpStore.close();
+      console.log('pre-add writer:', peer, peerLocalKey.toString('hex').substring(0, 16));
+      await base.append({ addWriter: peerLocalKey.toString('hex'), peerId: peer });
+    }
+    await base.update();
+  }
+
   setInterval(async () => {
+    await base.update();
     if (base.writable) {
-      const data = generateMockData();
-      await base.append(JSON.stringify(data));
-      console.log('>>> ENVIADO:', data.temperature.toFixed(1), '°C');
+      const data = generateMockData(PEER_ID);
+      await base.append(data);
+      console.log('>>> SENT:', PEER_ID, data.temperature.toFixed(1), '°C');
+    } else {
+      console.log('not writable yet, waiting...');
     }
   }, 10000);
 }
 
-iniciarNodo();
+iniciarNodo().catch(e => { console.error('FATAL:', e); });

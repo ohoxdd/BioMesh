@@ -1,78 +1,83 @@
-import React, { useState, useEffect } from 'react';
-import { Wifi, Activity } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Wifi } from 'lucide-react';
 import P2PMap from './components/Map';
 import P2PCharts from './components/Charts';
+
+const MAX_HISTORY = 200;
 
 function App() {
   const [connected, setConnected] = useState(false);
   const [peersData, setPeersData] = useState([]);
   const [dataHistory, setDataHistory] = useState([]);
+  const [selectedPeer, setSelectedPeer] = useState('all');
 
   useEffect(() => {
-    // Connect to local observador.js websocket
+    let ws;
+    let cancelled = false;
+
     const connectWS = () => {
-        const ws = new WebSocket('ws://localhost:8080');
+      ws = new WebSocket('ws://localhost:8080');
 
-        ws.onopen = () => {
-          console.log('Connected to P2P EdgeIA backend');
-          setConnected(true);
-        };
+      ws.onopen = () => {
+        console.log('Connected to BioMeshP2P observer');
+        setConnected(true);
+      };
 
-        ws.onclose = () => {
-          console.log('Disconnected from backend. Reconnecting in 3s...');
-          setConnected(false);
-          setTimeout(connectWS, 3000);
-        };
+      ws.onclose = () => {
+        console.log('Disconnected. Reconnecting in 3s...');
+        setConnected(false);
+        if (!cancelled) setTimeout(connectWS, 3000);
+      };
 
-        ws.onerror = (e) => {
-            console.error('WS Error:', e);
-            ws.close();
-        };
+      ws.onerror = (e) => {
+        console.error('WS Error:', e);
+        try { ws.close(); } catch(_) {}
+      };
 
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            console.log('New data from P2P:', data);
-            
-            // Ensure timestamp exists
-            if (!data.timestamp) data.timestamp = Date.now();
-            
-            // Update current peers location and latest data
-            setPeersData(prev => {
-              const peerId = data.peerId || 'unknown';
-              const filtered = prev.filter(p => (p.peerId || 'unknown') !== peerId);
-              return [...filtered, data];
-            });
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (!data.timestamp) data.timestamp = Date.now();
 
-            // Add to history for charts (keep last 50 points to avoid memory bloat)
-            setDataHistory(prev => {
-              const newHistory = [...prev, data];
-              if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
-              return newHistory;
-            });
+          // Latest snapshot per peer (for map + stat cards)
+          setPeersData(prev => {
+            const peerId = data.peerId || 'unknown';
+            const filtered = prev.filter(p => (p.peerId || 'unknown') !== peerId);
+            return [...filtered, data];
+          });
 
-          } catch (e) {
-            console.error('Error parsing WS message', e);
-          }
-        };
-        
-        return ws;
+          // Append to history
+          setDataHistory(prev => {
+            const next = [...prev, data];
+            if (next.length > MAX_HISTORY) return next.slice(next.length - MAX_HISTORY);
+            return next;
+          });
+        } catch (e) {
+          console.error('Error parsing WS message', e);
+        }
+      };
     };
-    
-    const ws = connectWS();
 
+    connectWS();
     return () => {
-        ws.onclose = null; // prevent reconnect on unmount
-        ws.close()
+      cancelled = true;
+      try { if (ws) { ws.onclose = null; ws.close(); } } catch(_) {}
     };
   }, []);
+
+  // Sorted unique peer list (stable order)
+  const peers = useMemo(() => {
+    const set = new Set();
+    for (const d of dataHistory) if (d.peerId) set.add(d.peerId);
+    return Array.from(set).sort();
+  }, [dataHistory]);
 
   const latestData = dataHistory.length > 0 ? dataHistory[dataHistory.length - 1] : null;
 
   return (
     <div className="dashboard-container">
       <header>
-        <h1>EdgeIA P2P Network</h1>
+        <h1>BioMeshP2P Monitoring</h1>
         <div className="status-indicator">
           <div className={`status-dot ${connected ? '' : 'disconnected'}`}></div>
           {connected ? 'Autobase Sincronizado' : 'Buscando Peers...'}
@@ -80,14 +85,18 @@ function App() {
       </header>
 
       <div className="grid-layout">
-        {/* Left column: Overview & Map */}
+        {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="glass-panel">
-            <h3 className="panel-title"><Wifi size={20} color="#3b82f6"/> Estado Global</h3>
+            <h3 className="panel-title"><Wifi size={20} color="#3b82f6" /> Estado Global</h3>
             <div className="stats-grid">
               <div className="stat-card">
-                <span className="stat-label">Nodos Activos</span>
+                <span className="stat-label">Sensores Activos</span>
                 <span className="stat-value">{peersData.length}</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Mensajes Totales</span>
+                <span className="stat-value">{dataHistory.length}</span>
               </div>
               <div className="stat-card">
                 <span className="stat-label">Última Actualización</span>
@@ -95,9 +104,15 @@ function App() {
                   {latestData ? new Date(latestData.timestamp).toLocaleTimeString() : '--:--'}
                 </span>
               </div>
+              <div className="stat-card">
+                <span className="stat-label">Filtro Activo</span>
+                <span className="stat-value" style={{ fontSize: '0.95rem', color: '#e2e8f0' }}>
+                  {selectedPeer === 'all' ? 'Todos' : selectedPeer}
+                </span>
+              </div>
             </div>
           </div>
-          
+
           <div className="glass-panel" style={{ padding: '0.5rem', height: '100%' }}>
             <P2PMap peersData={peersData} />
           </div>
@@ -106,7 +121,12 @@ function App() {
         {/* Right column: Charts */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="glass-panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 }}>
-             <P2PCharts dataHistory={dataHistory} />
+            <P2PCharts
+              dataHistory={dataHistory}
+              peers={peers}
+              selectedPeer={selectedPeer}
+              onSelectPeer={setSelectedPeer}
+            />
           </div>
         </div>
       </div>

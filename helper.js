@@ -11,7 +11,18 @@ function randomNormal(mean, stdDev) {
     return num * stdDev + mean;
 }
 
-const generateMockData = () => {
+// PeerId por defecto, puede ser sobrescrito por emisor.js
+let PEER_ID = 'emisor-arduino-1';
+
+// Permitir configurar el peerId desde fuera
+if (typeof global !== 'undefined' && global.peerId) {
+    PEER_ID = global.peerId;
+}
+
+const generateMockData = (peerId) => {
+    // Si se pasa un peerId, usarlo; si no, usar el global
+    const id = peerId || PEER_ID;
+    
     const getRandomInRange = (min, max, decimals = 1) => 
         parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 
@@ -43,7 +54,7 @@ const generateMockData = () => {
     const lon = getRandomInRange(2.1500, 2.1700, 4);
 
     return {
-        peerId: 'emisor-arduino-1',
+        peerId: id,  // Usar el peerId proporcionado
         timestamp: Date.now(),
         location: [lat, lon],  // Array para Map.jsx
         lat: lat,              // Compatibilidad
@@ -55,4 +66,5 @@ const generateMockData = () => {
         airQuality: getRandomInRange(0, 100)
     };
 };
+
 module.exports = { generateMockData };

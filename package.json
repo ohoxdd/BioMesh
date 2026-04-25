@@ -4,10 +4,18 @@
   "description": "Kirk67_LaNoticia_Covers_48_nixOS's hackUPC's project",
   "main": "index.js",
   "scripts": {
-    "emisor": "pear run emisor.js",
+    "emisor": "pear run emisor.js emisor-arduino-1",
+    "emisor1": "pear run emisor.js emisor-arduino-1",
+    "emisor2": "pear run emisor.js emisor-arduino-2",
+    "emisor3": "pear run emisor.js emisor-arduino-3",
     "observador": "node observador.js",
     "dashboard": "cd dashboard && npm run dev",
     "start": "./start.sh all",
+    "start:multi": "./start.sh multi",
+    "start:local": "./start.sh local",
+    "stop": "./start.sh stop",
+    "status": "./start.sh status",
+    "clean": "rm -rf datos-biomesh-* /tmp/biomesh-derive-*",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

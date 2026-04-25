@@ -191,3 +191,52 @@ h1 {
   font-size: 0.875rem;
   color: var(--text-secondary);
 }
+
+/* Peer selector */
+.peer-selector {
+  margin-bottom: 1.5rem;
+}
+
+.peer-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.peer-btn {
+  --peer-color: #06b6d4;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary, #cbd5e1);
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.peer-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--peer-color);
+  color: #fff;
+}
+
+.peer-btn.active {
+  background: color-mix(in srgb, var(--peer-color) 20%, transparent);
+  border-color: var(--peer-color);
+  color: #fff;
+  box-shadow: 0 0 0 1px var(--peer-color), 0 0 12px -2px var(--peer-color);
+}
+
+.peer-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
