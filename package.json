@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "emisor": "pear run emisor.js",
-    "observador": "pear run observador.js",
+    "observador": "node observador.js",
+    "dashboard": "cd dashboard && npm run dev",
+    "start": "./start.sh all",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

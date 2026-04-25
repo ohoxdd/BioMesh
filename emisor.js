@@ -37,12 +37,13 @@ async function iniciarNodo() {
     }
   }
 
-  // IMPORTANTE: null = crear NUEVA base, el emisor será el primer writer
   const base = new Autobase(store, null, { apply });
   await base.ready();
-  console.log('=== KEY:', base.key.toString('hex'), '===');
+  
+  const keyHex = base.key.toString('hex');
+  console.log('=== KEY:', keyHex, '===');
   console.log('Writable:', base.writable);
-
+  
   const swarm = new Hyperswarm();
   swarm.join(base.discoveryKey);
   

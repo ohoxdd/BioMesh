@@ -52,13 +52,23 @@ function broadcast(data) {
 // Leer key - soporte tanto para Pear como Node.js
 let BASE_KEY = null;
 
-//Desde Pear config
+// Desde Pear config
 if (typeof Pear !== 'undefined' && Pear.config.args && Pear.config.args.length > 0) {
   BASE_KEY = Pear.config.args[0];
 } 
 // Desde argumentos de línea de comandos (process.argv)
 else if (typeof process !== 'undefined' && process.argv && process.argv.length > 2) {
   BASE_KEY = process.argv[2];
+}
+// Desde archivo generado por emisor
+else {
+  try {
+    const fs = require('fs');
+    if (fs.existsSync('./emisor-key.txt')) {
+      BASE_KEY = fs.readFileSync('./emisor-key.txt', 'utf8').trim();
+      console.log('Key leída de emisor-key.txt:', BASE_KEY);
+    }
+  } catch(e) {}
 }
 
 async function conectar() {

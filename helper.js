@@ -19,7 +19,7 @@ const generateMockData = () => {
     let temperature = randomNormal(25, 5);
 
     //SPIKE (30% de probabilitat de valor exagerat)
-    const isSpike = Math.random() < 0.30; 
+    const isSpike = Math.random() < 0.10; 
     if (isSpike) {
         // Generem un pic extrem
         temperature = Math.random() > 0.5 ? getRandomInRange(80, 100) : getRandomInRange(-30, -10);
@@ -39,16 +39,18 @@ const generateMockData = () => {
     let light = (temperature > 25) ? randomNormal(800, 100) : randomNormal(300, 50);
     light = Math.max(0, Math.min(1000, light)); // Limitem rangs
 
+    const lat = getRandomInRange(41.3800, 41.4000, 4);
+    const lon = getRandomInRange(2.1500, 2.1700, 4);
+
     return {
         peerId: 'emisor-arduino-1',
         timestamp: Date.now(),
-        location: {
-            lat: getRandomInRange(41.3800, 41.4000, 4), 
-            lon: getRandomInRange(2.1500, 2.1700, 4)
-        },
+        location: [lat, lon],  // Array para Map.jsx
+        lat: lat,              // Compatibilidad
+        lng: lon,              // Compatibilidad
         temperature: parseFloat(temperature.toFixed(1)),
         humidity: parseFloat(humidity.toFixed(1)),
-        wind: Math.max(0, randomNormal(15, 10)).toFixed(1),
+        wind: parseFloat(Math.max(0, randomNormal(15, 10)).toFixed(1)),  // Number, no string
         light: parseFloat(light.toFixed(1)),
         airQuality: getRandomInRange(0, 100)
     };
