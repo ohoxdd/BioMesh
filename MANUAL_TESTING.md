@@ -312,7 +312,8 @@ emisor.js (peerId=emisor-arduino-N)
     │    └─ pre-add writers de emisor-arduino-2 y emisor-arduino-3
     │
     ├─ generateMockData(peerId) → JSON
-    └─ base.append(data)
+    ├─ ai.evaluate(data, history) → verdict (async, tfjs or fallback)
+    └─ base.append({...data, verdict})
               │
               │ Hyperswarm replication (discoveryKey = base.discoveryKey)
               ▼
@@ -321,7 +322,10 @@ observador.js
     ├─ Autobase con misma KEY
     ├─ apply(nodes) recorre cada node
     │    ├─ value.addWriter → host.addWriter()
-    │    └─ value tipo data → broadcast(value)
+    │    └─ value tipo data → broadcast(value) + consensus.check()
+    └─ consensus.shouldTrigger()
+         └─ Si ≥2/3 peers HIGH → triggerEvent() → LED alert
+    │
     └─ WebSocket :8080
               │
               ▼
@@ -330,3 +334,105 @@ dashboard/App.jsx
     ├─ ws.onmessage(data)
     └─ setState por peerId → Charts/Map renderizan
 ```
+
+---
+
+## AI Model Testing
+
+### Verify Model Loads
+
+```bash
+node -e "
+const ai = require('./ai');
+(async () => {
+  const v = await ai.evaluate({temperature:42, humidity:15, wind:10, light:900, airQuality:80}, []);
+  console.log('verdict:', v);
+})();
+"
+```
+
+Expected: `risk: 'high'`, `model: 'biomesh-risk-v1'`
+
+### Verify Model Accuracy
+
+```bash
+npm run verify-model
+```
+
+Expected: 5/5 test cases pass.
+
+### Manual Test Cases
+
+| Name | Input | Expected |
+|------|-------|----------|
+| heatwave | temp=42, hum=18, wind=8, light=950, aq=80 | high |
+| freeze | temp=-5, hum=70, wind=12, light=200, aq=30 | high |
+| calm-day | temp=22, hum=55, wind=10, light=600, aq=35 | low |
+| windstorm | temp=18, hum=60, wind=65, light=400, aq=40 | high |
+| pollution | temp=25, hum=50, wind=5, light=700, aq=88 | high |
+
+---
+
+## LED Actuator Testing
+
+### Manual LED Test
+
+```bash
+npm run led:on      # Alert pattern (RED)
+npm run led:off     # Safe pattern (GREEN)
+npm run led:flash   # Pulse animation
+```
+
+### Expected Output (PC mock mode)
+
+```
+[led] PC mock mode - using console alerts
+[led] ON (RED - HIGH RISK)
+[led] display: alert
+[led] *************
+[led] *         *
+[led] *  alert  *
+[led] *  !!    *
+[led] ...
+```
+
+### Consensus → LED Trigger
+
+When 2/3 peers report `HIGH` risk:
+
+```bash
+tail -f /tmp/biomesh-observador.log | grep -E "CONSENSUS|led"
+```
+
+Expected:
+```
+[CONSENSUS] HIGH RISK consensus: 2/3 (threshold 2)
+============================================================
+!!! BIOMESH ALERT !!!
+Peer:        observador
+High count:  2 / 3
+============================================================
+[led] ON (RED - HIGH RISK)
+```
+
+---
+
+## Training (Optional)
+
+If modifying the model:
+
+```bash
+# Clean old model
+rm -rf ai/models/biomesh-risk-v1
+
+# Generate dataset
+npm run dataset:real
+
+# Train
+npm run train
+
+# Verify
+npm run verify-model
+```
+
+Model artifacts: `ai/models/biomesh-risk-v1/{model.json,weights.bin,metadata.json}`
