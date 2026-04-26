@@ -221,8 +221,3 @@ Auto-detected: if `/dev/ttyACM0` unavailable, uses console output.
 - **AI**: `@tensorflow/tfjs` (pure JS, no native bindings)
 - **Dashboard**: React + Vite + WebSocket
 
----
-
-## License
-
-ISC
