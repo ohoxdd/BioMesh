@@ -1,6 +1,7 @@
 # BioMeshP2P
-
+> This project is a fork from the original project made for HackUPC 2026 (Salipoke/hackUPC_2026), where I designed the application and implemented it along [Lucas "Salipoke"](https://github.com/Salipoke), [Aina Vives](https://github.com/aivii126) and [Pau Carulla](https://github.com/coco48)
 A decentralized P2P environmental monitoring network for Barcelona that uses Arduino UNO Q nodes with local TensorFlow.js EdgeAI to detect high-risk environmental conditions and trigger collective alerts.
+
 
 ---
 
